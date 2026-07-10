@@ -1,17 +1,67 @@
 # Tiny LLM inference server: Ollama running Qwen2.5 0.5B on CPU.
-# Small enough to run on GKE Autopilot without any GPU quota.
+#
+# This file is a template: ${PROJECT_ID}, ${REGION} and ${MODELS_BUCKET} are
+# filled in from Terraform outputs by `make deploy` (envsubst).
+#
+# Managed services in play:
+#   - Image pulled through the Artifact Registry remote repo (Docker Hub proxy)
+#   - Model weights live in a GCS bucket mounted via the GCS FUSE CSI driver
+#   - Bucket access via Workload Identity Federation (no keys, no GSA)
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: ServiceAccount
 metadata:
-  name: ollama-models
+  name: ollama
+  namespace: nano-llm
+---
+# One-off Job that seeds the model into the GCS bucket. Ollama can only pull
+# through a running server, so it starts one, pulls, and exits. Later pods
+# find the weights already in the bucket and skip the download.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-model-seed
   namespace: nano-llm
 spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: standard-rwo
-  resources:
-    requests:
-      storage: 10Gi
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+        gke-gcsfuse/volumes: "true"
+    spec:
+      serviceAccountName: ollama
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/dockerhub/ollama/ollama:0.9.6
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              ollama serve &
+              until ollama list >/dev/null 2>&1; do sleep 2; done
+              ollama pull qwen2.5:0.5b
+          env:
+            - name: OLLAMA_MODELS
+              value: /models
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 2Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 2Gi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            volumeAttributes:
+              bucketName: ${MODELS_BUCKET}
+              mountOptions: "implicit-dirs"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,11 +71,9 @@ metadata:
   labels:
     app: ollama
 spec:
+  # Weights are shared read-mostly via GCS, so this scales horizontally:
+  # bump replicas (or add an HPA) without storage changes.
   replicas: 1
-  # Recreate: the model PVC is ReadWriteOnce, so the old pod must
-  # release it before a new one can start.
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: ollama
@@ -33,16 +81,21 @@ spec:
     metadata:
       labels:
         app: ollama
+      annotations:
+        gke-gcsfuse/volumes: "true"
     spec:
+      serviceAccountName: ollama
       containers:
         - name: ollama
-          image: ollama/ollama:0.9.6
+          image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/dockerhub/ollama/ollama:0.9.6
           ports:
             - name: http
               containerPort: 11434
           env:
             - name: OLLAMA_KEEP_ALIVE
               value: "-1" # keep the model loaded in memory
+            - name: OLLAMA_MODELS
+              value: /models
           resources:
             requests:
               cpu: "2"
@@ -52,10 +105,6 @@ spec:
               cpu: "2"
               memory: 4Gi
               ephemeral-storage: 2Gi
-          lifecycle:
-            postStart:
-              exec:
-                command: ["ollama", "pull", "qwen2.5:0.5b"]
           readinessProbe:
             httpGet:
               path: /api/tags
@@ -70,11 +119,15 @@ spec:
             periodSeconds: 30
           volumeMounts:
             - name: models
-              mountPath: /root/.ollama
+              mountPath: /models
       volumes:
         - name: models
-          persistentVolumeClaim:
-            claimName: ollama-models
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            volumeAttributes:
+              bucketName: ${MODELS_BUCKET}
+              # file-cache keeps hot model blobs on local disk after first read
+              mountOptions: "implicit-dirs,file-cache:max-size-mb:2048"
 ---
 apiVersion: v1
 kind: Service
@@ -84,8 +137,8 @@ metadata:
   labels:
     app: ollama
 spec:
-  # ClusterIP keeps the LLM private; reach it with kubectl port-forward.
-  # Change to LoadBalancer if you want an external IP (see README).
+  # ClusterIP; reachable via kubectl port-forward, or through the managed
+  # global load balancer when the Gateway stack (k8s/gateway.yaml) is applied.
   type: ClusterIP
   selector:
     app: ollama

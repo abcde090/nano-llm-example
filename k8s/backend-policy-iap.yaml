@@ -1,0 +1,23 @@
+# Backend policy: Cloud Armor + Identity-Aware Proxy.
+# Applied by `make deploy-gateway` when terraform enable_iap = true.
+#
+# Template variables: ${IAP_CLIENT_ID}
+# The referenced Secret is created by the Makefile from Secret Manager:
+#   secret `iap-oauth` with key `key` = OAuth client secret.
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: ollama
+  namespace: nano-llm
+spec:
+  default:
+    securityPolicy: nano-llm-armor
+    iap:
+      enabled: true
+      clientID: ${IAP_CLIENT_ID}
+      oauth2ClientSecret:
+        name: iap-oauth
+  targetRef:
+    group: ""
+    kind: Service
+    name: ollama

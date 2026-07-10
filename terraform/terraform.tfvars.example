@@ -6,3 +6,17 @@ region     = "australia-southeast1"
 # cluster_name        = "nano-llm"
 # network_name        = "nano-llm-vpc"
 # deletion_protection = true
+
+# Public HTTPS edge (Gateway + managed cert + Cloud Armor). Empty = private only.
+# domain = "llm.example.com"
+
+# Identity-Aware Proxy (org-owned projects only; requires domain).
+# enable_iap        = true
+# iap_support_email = "you@example.com"
+# iap_members       = ["user:you@example.com"]
+
+# Cloud Monitoring alert notifications.
+# alert_email = "you@example.com"
+
+# Cloud Build GitHub trigger (create the connection once in the console first).
+# cloudbuild_connection = "projects/my-gcp-project/locations/australia-southeast1/connections/github"

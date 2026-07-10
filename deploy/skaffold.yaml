@@ -1,0 +1,12 @@
+# Skaffold config consumed by Cloud Deploy. The manifests listed here are the
+# *rendered* copies staged next to this file by cloudbuild.yaml.
+apiVersion: skaffold/v4beta7
+kind: Config
+metadata:
+  name: nano-llm
+manifests:
+  rawYaml:
+    - namespace.yaml
+    - ollama.yaml
+deploy:
+  kubectl: {}

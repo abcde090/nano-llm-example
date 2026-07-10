@@ -1,0 +1,16 @@
+# Backend policy: Cloud Armor rate limiting on the LLM backend.
+# Applied by `make deploy-gateway` when IAP is disabled.
+# (Only one GCPBackendPolicy may target a Service — the IAP variant in
+# backend-policy-iap.yaml replaces this one, it does not stack.)
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: ollama
+  namespace: nano-llm
+spec:
+  default:
+    securityPolicy: nano-llm-armor
+  targetRef:
+    group: ""
+    kind: Service
+    name: ollama
