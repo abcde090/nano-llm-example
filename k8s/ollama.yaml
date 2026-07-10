@@ -1,0 +1,95 @@
+# Tiny LLM inference server: Ollama running Qwen2.5 0.5B on CPU.
+# Small enough to run on GKE Autopilot without any GPU quota.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: nano-llm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-rwo
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: nano-llm
+  labels:
+    app: ollama
+spec:
+  replicas: 1
+  # Recreate: the model PVC is ReadWriteOnce, so the old pod must
+  # release it before a new one can start.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.9.6
+          ports:
+            - name: http
+              containerPort: 11434
+          env:
+            - name: OLLAMA_KEEP_ALIVE
+              value: "-1" # keep the model loaded in memory
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 2Gi
+          lifecycle:
+            postStart:
+              exec:
+                command: ["ollama", "pull", "qwen2.5:0.5b"]
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: nano-llm
+  labels:
+    app: ollama
+spec:
+  # ClusterIP keeps the LLM private; reach it with kubectl port-forward.
+  # Change to LoadBalancer if you want an external IP (see README).
+  type: ClusterIP
+  selector:
+    app: ollama
+  ports:
+    - name: http
+      port: 11434
+      targetPort: http

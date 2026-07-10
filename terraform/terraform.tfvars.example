@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and fill in your values.
+project_id = "my-gcp-project"
+region     = "australia-southeast1"
+
+# Optional overrides:
+# cluster_name        = "nano-llm"
+# network_name        = "nano-llm-vpc"
+# deletion_protection = true
