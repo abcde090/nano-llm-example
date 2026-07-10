@@ -23,6 +23,8 @@ resource "google_certificate_manager_dns_authorization" "llm" {
 
   name   = "nano-llm-dns-auth"
   domain = var.domain
+
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_certificate_manager_certificate" "llm" {
@@ -41,6 +43,8 @@ resource "google_certificate_manager_certificate_map" "llm" {
   count = local.edge_enabled ? 1 : 0
 
   name = "nano-llm-cert-map"
+
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_certificate_manager_certificate_map_entry" "llm" {
@@ -122,6 +126,8 @@ resource "google_iap_web_iam_member" "allowed" {
 
   role   = "roles/iap.httpsResourceAccessor"
   member = each.value
+
+  depends_on = [google_project_service.apis]
 }
 
 # Keep the OAuth client secret in Secret Manager; `make deploy-gateway`

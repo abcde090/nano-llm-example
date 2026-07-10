@@ -12,17 +12,24 @@ resource "google_storage_bucket" "models" {
   depends_on = [google_project_service.apis]
 }
 
-# Grant the ollama Kubernetes ServiceAccount access to the bucket via direct
-# Workload Identity Federation — no GSA or key files needed. The principal
-# maps to ServiceAccount `ollama` in namespace `nano-llm`.
+# Bucket access via direct Workload Identity Federation — no GSA or key
+# files. Two identities with least privilege:
+#   - ollama-seed (the one-off seed Job) writes weights into the bucket
+#   - ollama (the serving Deployment) only reads them
 locals {
-  ollama_wi_principal = "principal://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${var.project_id}.svc.id.goog/subject/ns/nano-llm/sa/ollama"
+  wi_pool          = "projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${var.project_id}.svc.id.goog"
+  ollama_principal = "principal://iam.googleapis.com/${local.wi_pool}/subject/ns/nano-llm/sa/ollama"
+  seed_principal   = "principal://iam.googleapis.com/${local.wi_pool}/subject/ns/nano-llm/sa/ollama-seed"
 }
 
-resource "google_storage_bucket_iam_member" "ollama_models_admin" {
+resource "google_storage_bucket_iam_member" "seed_writes_models" {
   bucket = google_storage_bucket.models.name
-  # objectAdmin (not just viewer) because the seed Job writes weights into the
-  # bucket and the server updates manifest metadata under the same prefix.
   role   = "roles/storage.objectAdmin"
-  member = local.ollama_wi_principal
+  member = local.seed_principal
+}
+
+resource "google_storage_bucket_iam_member" "ollama_reads_models" {
+  bucket = google_storage_bucket.models.name
+  role   = "roles/storage.objectViewer"
+  member = local.ollama_principal
 }

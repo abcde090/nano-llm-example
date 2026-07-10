@@ -5,63 +5,14 @@
 #
 # Managed services in play:
 #   - Image pulled through the Artifact Registry remote repo (Docker Hub proxy)
-#   - Model weights live in a GCS bucket mounted via the GCS FUSE CSI driver
+#   - Model weights read from a GCS bucket via the GCS FUSE CSI driver
+#     (seeded once by k8s/seed-job.yaml, which has the write-capable identity)
 #   - Bucket access via Workload Identity Federation (no keys, no GSA)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: ollama
   namespace: nano-llm
----
-# One-off Job that seeds the model into the GCS bucket. Ollama can only pull
-# through a running server, so it starts one, pulls, and exits. Later pods
-# find the weights already in the bucket and skip the download.
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: ollama-model-seed
-  namespace: nano-llm
-spec:
-  backoffLimit: 3
-  template:
-    metadata:
-      annotations:
-        gke-gcsfuse/volumes: "true"
-    spec:
-      serviceAccountName: ollama
-      restartPolicy: OnFailure
-      containers:
-        - name: seed
-          image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/dockerhub/ollama/ollama:0.9.6
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              set -e
-              ollama serve &
-              until ollama list >/dev/null 2>&1; do sleep 2; done
-              ollama pull qwen2.5:0.5b
-          env:
-            - name: OLLAMA_MODELS
-              value: /models
-          resources:
-            requests:
-              cpu: "1"
-              memory: 2Gi
-              ephemeral-storage: 2Gi
-            limits:
-              cpu: "1"
-              memory: 2Gi
-              ephemeral-storage: 2Gi
-          volumeMounts:
-            - name: models
-              mountPath: /models
-      volumes:
-        - name: models
-          csi:
-            driver: gcsfuse.csi.storage.gke.io
-            volumeAttributes:
-              bucketName: ${MODELS_BUCKET}
-              mountOptions: "implicit-dirs"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -71,7 +22,7 @@ metadata:
   labels:
     app: ollama
 spec:
-  # Weights are shared read-mostly via GCS, so this scales horizontally:
+  # Weights are shared read-only via GCS, so this scales horizontally:
   # bump replicas (or add an HPA) without storage changes.
   replicas: 1
   selector:
@@ -105,25 +56,35 @@ spec:
               cpu: "2"
               memory: 4Gi
               ephemeral-storage: 2Gi
+          # Gate readiness on the model actually being servable, not just the
+          # server being up: /api/tags returns 200 even with an empty model
+          # store, which would put the pod behind the LB while the seed Job
+          # is still populating the bucket. failureThreshold allows ~30 min
+          # for the seed Job plus gcsfuse metadata caching to catch up.
+          startupProbe:
+            exec:
+              command: ["ollama", "show", "qwen2.5:0.5b"]
+            periodSeconds: 15
+            failureThreshold: 120
           readinessProbe:
             httpGet:
               path: /api/tags
               port: http
-            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /api/tags
               port: http
-            initialDelaySeconds: 30
             periodSeconds: 30
           volumeMounts:
             - name: models
               mountPath: /models
+              readOnly: true
       volumes:
         - name: models
           csi:
             driver: gcsfuse.csi.storage.gke.io
+            readOnly: true
             volumeAttributes:
               bucketName: ${MODELS_BUCKET}
               # file-cache keeps hot model blobs on local disk after first read

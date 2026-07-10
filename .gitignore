@@ -10,7 +10,9 @@ override.tf.json
 *_override.tf.json
 terraform.tfvars
 !terraform.tfvars.example
-.terraform.lock.hcl
+# Note: .terraform.lock.hcl is intentionally NOT ignored — commit the lock
+# files (terraform/ and terraform/bootstrap/) so CI and teammates resolve
+# identical provider versions.
 
 # Rendered manifests (Cloud Build staging)
 rendered/

@@ -21,9 +21,15 @@ creds:
 
 # Core workload: namespace, model-seed Job, Ollama deployment + service.
 # Manifests are templates; envsubst fills them from Terraform outputs
-# (requires gettext's envsubst).
+# (requires gettext's envsubst). The completed seed Job is deleted first —
+# Job templates are immutable, so a changed template can't be re-applied.
 deploy:
 	kubectl apply -f k8s/namespace.yaml
+	kubectl -n nano-llm delete job ollama-model-seed --ignore-not-found
+	PROJECT_ID=$$($(TF_OUT) project_id) \
+	REGION=$$($(TF_OUT) cluster_region) \
+	MODELS_BUCKET=$$($(TF_OUT) models_bucket) \
+	  envsubst '$$PROJECT_ID $$REGION $$MODELS_BUCKET' < k8s/seed-job.yaml | kubectl apply -f -
 	PROJECT_ID=$$($(TF_OUT) project_id) \
 	REGION=$$($(TF_OUT) cluster_region) \
 	MODELS_BUCKET=$$($(TF_OUT) models_bucket) \
@@ -38,9 +44,10 @@ deploy-gateway:
 	DOMAIN=$$($(TF_OUT) domain) \
 	  envsubst '$$DOMAIN' < k8s/gateway.yaml | kubectl apply -f -
 	@if [ "$$($(TF_OUT) iap_enabled)" = "true" ]; then \
-	  kubectl -n nano-llm create secret generic iap-oauth \
-	    --from-literal=key="$$(gcloud secrets versions access latest --secret=nano-llm-iap-client-secret)" \
-	    --dry-run=client -o yaml | kubectl apply -f -; \
+	  gcloud secrets versions access latest --secret=nano-llm-iap-client-secret \
+	    | kubectl -n nano-llm create secret generic iap-oauth \
+	        --from-file=key=/dev/stdin --dry-run=client -o yaml \
+	    | kubectl apply -f -; \
 	  IAP_CLIENT_ID=$$($(TF_OUT) iap_client_id) \
 	    envsubst '$$IAP_CLIENT_ID' < k8s/backend-policy-iap.yaml | kubectl apply -f -; \
 	else \

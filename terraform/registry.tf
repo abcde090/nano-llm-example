@@ -20,3 +20,14 @@ resource "google_artifact_registry_repository" "dockerhub_remote" {
 
   depends_on = [google_project_service.apis]
 }
+
+# Autopilot nodes pull as the Compute Engine default service account; grant it
+# read on this repository explicitly so pulls keep working on projects where
+# the default SA's legacy Editor role has been removed.
+resource "google_artifact_registry_repository_iam_member" "nodes_pull" {
+  project    = var.project_id
+  location   = google_artifact_registry_repository.dockerhub_remote.location
+  repository = google_artifact_registry_repository.dockerhub_remote.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+}

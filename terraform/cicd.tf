@@ -63,12 +63,29 @@ resource "google_project_iam_member" "cloudbuild_roles" {
   for_each = toset([
     "roles/clouddeploy.releaser",
     "roles/logging.logWriter",
-    "roles/storage.objectAdmin", # release source + build artifacts
   ])
 
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.cloudbuild.email}"
+}
+
+# Dedicated staging bucket for Cloud Deploy release sources. gcloud needs
+# storage.buckets.get on the staging location, so the grant is bucket-scoped
+# storage.admin rather than a project-wide role.
+resource "google_storage_bucket" "deploy_staging" {
+  name                        = "${var.project_id}-nano-llm-deploy-staging"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = true
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_storage_bucket_iam_member" "cloudbuild_staging" {
+  bucket = google_storage_bucket.deploy_staging.name
+  role   = "roles/storage.admin"
+  member = "serviceAccount:${google_service_account.cloudbuild.email}"
 }
 
 # Cloud Build must be able to act as the Cloud Deploy execution SA when

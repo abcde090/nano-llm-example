@@ -36,7 +36,14 @@ spec:
   hostnames:
     - ${DOMAIN}
   rules:
-    - backendRefs:
+    # Only the OpenAI-compatible inference surface is routed. Ollama's
+    # management API (/api/pull, /api/delete, /api/push, ...) stays
+    # unreachable from the internet; use port-forward for it.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1
+      backendRefs:
         - name: ollama
           port: 11434
 ---

@@ -78,6 +78,9 @@ cd ..
 terraform init -migrate-state -backend-config="bucket=YOUR_PROJECT-nano-llm-tfstate"
 ```
 
+(This leaves you in `terraform/` — skip the `cd terraform` at the start of
+step 1.)
+
 ## 1. Provision infrastructure
 
 ```bash
@@ -87,10 +90,13 @@ terraform init
 terraform apply
 ```
 
-Takes ~10 minutes. Then configure kubectl:
+Takes ~10 minutes. Commit the `.terraform.lock.hcl` that `init` generates so CI
+resolves the same provider versions. Then configure kubectl and return to the
+repo root (the Makefile lives there):
 
 ```bash
 $(terraform output -raw get_credentials_command)
+cd ..
 ```
 
 ## 2. Deploy the LLM
@@ -99,9 +105,11 @@ $(terraform output -raw get_credentials_command)
 make deploy
 ```
 
-This applies the namespace, runs the **model-seed Job** (pulls the ~400 MB
-Qwen2.5 0.5B weights into the GCS bucket once), and rolls out the Ollama
-deployment, which mounts those weights via GCS FUSE. First run is slow while
+This applies the namespace, runs the **model-seed Job** (`k8s/seed-job.yaml`,
+pulls the ~400 MB Qwen2.5 0.5B weights into the GCS bucket once under a
+write-capable identity), and rolls out the Ollama deployment, which mounts
+those weights read-only via GCS FUSE. Pods only report Ready once the model is
+actually servable (`ollama show` startup probe). First run is slow while
 Autopilot provisions a node; later restarts reuse the bucket.
 
 ## 3. Talk to it
@@ -122,6 +130,13 @@ curl http://localhost:11434/v1/chat/completions \
 ```
 
 ## 4. (Optional) Public HTTPS endpoint
+
+> **Warning:** without IAP (`enable_iap = false`, the default) the endpoint is
+> **public and unauthenticated** — the Cloud Armor 60 req/min/IP throttle is
+> abuse mitigation, not access control, and anyone can run inference on your
+> bill. Enable IAP (org-owned projects) or put your own auth in front for
+> anything beyond a short-lived demo. Only the OpenAI-compatible `/v1` paths
+> are routed through the load balancer; Ollama's management API stays private.
 
 Set in `terraform.tfvars`:
 
@@ -194,7 +209,7 @@ terraform/            # GCP infra: APIs, VPC+NAT, GKE Autopilot, Artifact
 │                     # Registry, GCS, Cloud Armor, Certificate Manager,
 │                     # IAP, Secret Manager, Monitoring, Cloud Deploy
 ├── bootstrap/        # one-time GCS bucket for Terraform state
-k8s/                  # manifest templates: Ollama, Gateway, backend policies
+k8s/                  # manifest templates: Ollama, seed Job, Gateway, backend policies
 deploy/skaffold.yaml  # Cloud Deploy render/apply config
 cloudbuild.yaml       # CI pipeline (validate → render → release)
 Makefile              # init/plan/apply · creds · deploy · deploy-gateway · chat

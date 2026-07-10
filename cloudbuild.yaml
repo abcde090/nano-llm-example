@@ -41,7 +41,8 @@ steps:
         gcloud deploy releases create "rel-$SHORT_SHA" \
           --delivery-pipeline="${_PIPELINE}" \
           --region="${_REGION}" \
-          --source=rendered
+          --source=rendered \
+          --gcs-source-staging-dir="gs://$PROJECT_ID-nano-llm-deploy-staging/source"
 
 substitutions:
   _REGION: australia-southeast1

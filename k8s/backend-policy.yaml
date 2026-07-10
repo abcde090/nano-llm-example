@@ -1,5 +1,12 @@
 # Backend policy: Cloud Armor rate limiting on the LLM backend.
 # Applied by `make deploy-gateway` when IAP is disabled.
+#
+# WARNING: with this variant the endpoint is PUBLIC and UNAUTHENTICATED.
+# The Cloud Armor 60 req/min/IP throttle is abuse mitigation, not access
+# control — anyone on the internet can run inference on your bill. Use the
+# IAP variant (enable_iap = true) or put your own auth in front for anything
+# beyond a short-lived demo.
+#
 # (Only one GCPBackendPolicy may target a Service — the IAP variant in
 # backend-policy-iap.yaml replaces this one, it does not stack.)
 apiVersion: networking.gke.io/v1
