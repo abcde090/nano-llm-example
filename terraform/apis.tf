@@ -12,6 +12,7 @@ locals {
     "iap.googleapis.com",
     "cloudbuild.googleapis.com",
     "clouddeploy.googleapis.com",
+    "billingbudgets.googleapis.com",
   ]
 }
 

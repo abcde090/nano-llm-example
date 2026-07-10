@@ -18,5 +18,9 @@ region     = "australia-southeast1"
 # Cloud Monitoring alert notifications.
 # alert_email = "you@example.com"
 
+# Monthly billing budget (requires billing-account permissions).
+# billing_account    = "XXXXXX-XXXXXX-XXXXXX"
+# monthly_budget_usd = 200
+
 # Cloud Build GitHub trigger (create the connection once in the console first).
 # cloudbuild_connection = "projects/my-gcp-project/locations/australia-southeast1/connections/github"

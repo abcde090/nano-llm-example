@@ -9,5 +9,7 @@ manifests:
     - namespace.yaml
     - ollama.yaml
     - webui.yaml
+    - hpa.yaml
+    - network-policy.yaml
 deploy:
   kubectl: {}

@@ -81,6 +81,20 @@ variable "alert_email" {
   default     = ""
 }
 
+# --- Cost guardrail ---
+
+variable "billing_account" {
+  description = "Billing account ID (XXXXXX-XXXXXX-XXXXXX) to attach a monthly budget to. Leave empty to skip; requires billing-account permissions."
+  type        = string
+  default     = ""
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly budget amount in USD for the budget alert."
+  type        = number
+  default     = 200
+}
+
 # --- CI/CD ---
 
 variable "cloudbuild_connection" {

@@ -9,6 +9,16 @@ resource "google_storage_bucket" "models" {
   uniform_bucket_level_access = true
   force_destroy               = true # example repo: allow destroy with objects inside
 
+  # Don't pay for half-finished uploads if a seed Job dies mid-pull.
+  lifecycle_rule {
+    action {
+      type = "AbortIncompleteMultipartUpload"
+    }
+    condition {
+      age = 7
+    }
+  }
+
   depends_on = [google_project_service.apis]
 }
 

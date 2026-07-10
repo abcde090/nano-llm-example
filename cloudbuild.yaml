@@ -27,6 +27,8 @@ steps:
         cp deploy/skaffold.yaml rendered/
         cp k8s/namespace.yaml rendered/
         cp k8s/webui.yaml rendered/
+        cp k8s/hpa.yaml rendered/
+        cp k8s/network-policy.yaml rendered/
         sed -e "s/\$${PROJECT_ID}/$PROJECT_ID/g" \
             -e "s/\$${REGION}/${_REGION}/g" \
             -e "s/\$${MODELS_BUCKET}/$PROJECT_ID-nano-llm-models/g" \

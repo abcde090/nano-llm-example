@@ -22,9 +22,8 @@ metadata:
   labels:
     app: ollama
 spec:
-  # Weights are shared read-only via GCS, so this scales horizontally:
-  # bump replicas (or add an HPA) without storage changes.
-  replicas: 1
+  # No explicit replicas: the HPA in k8s/hpa.yaml owns the replica count
+  # (a hardcoded value here would reset it on every re-apply).
   selector:
     matchLabels:
       app: ollama

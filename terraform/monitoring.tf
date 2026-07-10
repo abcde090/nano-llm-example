@@ -44,6 +44,62 @@ resource "google_monitoring_alert_policy" "ollama_restarts" {
   depends_on = [google_project_service.apis]
 }
 
+# Managed uptime check against the public endpoint, probing the
+# OpenAI-compatible model list from Google's global checkers. Only created
+# when the edge stack is up and IAP is off (IAP would answer 302/401 to
+# unauthenticated checkers and make the check permanently red).
+resource "google_monitoring_uptime_check_config" "llm" {
+  count = var.domain != "" && !var.enable_iap ? 1 : 0
+
+  display_name = "nano-llm endpoint"
+  timeout      = "10s"
+  period       = "300s"
+
+  http_check {
+    path         = "/v1/models"
+    port         = 443
+    use_ssl      = true
+    validate_ssl = true
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      project_id = var.project_id
+      host       = var.domain
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_monitoring_alert_policy" "llm_uptime" {
+  count = var.domain != "" && !var.enable_iap ? 1 : 0
+
+  display_name = "nano-llm: public endpoint down"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "uptime check failing"
+
+    condition_threshold {
+      filter          = "metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type = \"uptime_url\" AND metric.labels.check_id = \"${google_monitoring_uptime_check_config.llm[0].uptime_check_id}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 1
+      duration        = "600s"
+
+      aggregations {
+        alignment_period     = "1200s"
+        per_series_aligner   = "ALIGN_NEXT_OLDER"
+        cross_series_reducer = "REDUCE_COUNT_FALSE"
+        group_by_fields      = ["resource.label.host"]
+      }
+    }
+  }
+
+  notification_channels = google_monitoring_notification_channel.email[*].id
+}
+
 # Warn before the model no longer fits in memory.
 resource "google_monitoring_alert_policy" "ollama_memory" {
   display_name = "nano-llm: ollama memory > 90%"

@@ -23,6 +23,8 @@ Reference: [AI/ML orchestration on GKE](https://docs.cloud.google.com/kubernetes
 | Authentication | **Identity-Aware Proxy** (opt-in) | `terraform/edge.tf`, `k8s/backend-policy-iap.yaml` |
 | Secrets | **Secret Manager** (IAP OAuth client secret) | `terraform/edge.tf` |
 | Metrics / alerting | Cloud **Monitoring** + Managed Service for **Prometheus** (built into Autopilot) | `terraform/monitoring.tf` |
+| Endpoint uptime | Cloud Monitoring **uptime checks** (public endpoint, opt-in) | `terraform/monitoring.tf` |
+| Cost guardrail | Cloud **Billing budgets** (opt-in) | `terraform/budget.tf` |
 | Terraform state | **GCS** backend with versioning | `terraform/bootstrap/` |
 | CI/CD | **Cloud Build** → **Cloud Deploy** → GKE | `cloudbuild.yaml`, `deploy/`, `terraform/cicd.tf` |
 
@@ -150,6 +152,12 @@ curl http://localhost:11434/v1/chat/completions \
 Any OpenAI SDK/client also works — set `base_url` to
 `http://localhost:11434/v1` (API key can be any string).
 
+**Automated smoke test:**
+
+```bash
+make test          # port-forwards, requests a completion, asserts a reply
+```
+
 ## 4. (Optional) Public HTTPS endpoint
 
 > **Warning:** without IAP (`enable_iap = false`, the default) the endpoint is
@@ -217,8 +225,10 @@ everything down.
   `cloud.google.com/gke-accelerator: nvidia-l4` plus a `nvidia.com/gpu: "1"`
   resource limit — Autopilot provisions the GPU node automatically (subject
   to GPU quota).
-- **Scale out**: weights are shared via GCS, so raise `replicas` or add an
-  HPA; the load balancer spreads traffic across pods.
+- **Scale out**: already wired — an HPA (`k8s/hpa.yaml`) scales the
+  deployment 1→4 replicas on CPU; weights are shared via GCS and the load
+  balancer spreads traffic across pods. A NetworkPolicy restricts in-cluster
+  access to Ollama to the WebUI and the load balancer.
 - **Fully managed alternative**: if you want zero cluster ops, Vertex AI
   Model Garden / online prediction endpoints replace this whole stack — GKE
   is the right choice when you want control of the serving layer.
@@ -230,7 +240,10 @@ terraform/            # GCP infra: APIs, VPC+NAT, GKE Autopilot, Artifact
 │                     # Registry, GCS, Cloud Armor, Certificate Manager,
 │                     # IAP, Secret Manager, Monitoring, Cloud Deploy
 ├── bootstrap/        # one-time GCS bucket for Terraform state
-k8s/                  # manifest templates: Ollama, seed Job, Open WebUI, Gateway, backend policies
+k8s/                  # manifest templates: Ollama, seed Job, Open WebUI, HPA,
+│                     # NetworkPolicy, Gateway, backend policies
+scripts/              # smoke-test.sh (end-to-end completion check)
+.github/workflows/    # repo CI: terraform validate + kubeconform + shellcheck
 deploy/skaffold.yaml  # Cloud Deploy render/apply config
 cloudbuild.yaml       # CI pipeline (validate → render → release)
 Makefile              # init/plan/apply · creds · deploy · deploy-gateway · chat
