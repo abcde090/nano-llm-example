@@ -70,6 +70,26 @@ webui:
 test:
 	./scripts/smoke-test.sh
 
+# --- ADK multi-agent app (adk/) ---
+
+# Local dev UI: needs `pip install -r adk/requirements.txt` once, and
+# `make chat` port-forwarding in another terminal. Opens on :8000.
+adk-web:
+	cd adk && OLLAMA_API_BASE=http://localhost:11434/v1 adk web
+
+# Build and push the agent image with Cloud Build.
+adk-build:
+	gcloud builds submit adk \
+	  --project "$$($(TF_OUT) project_id)" \
+	  --tag "$$($(TF_OUT) artifact_registry_apps)/nano-team-adk:latest"
+
+# Deploy the agent API onto the cluster (run adk-build first).
+adk-deploy:
+	PROJECT_ID=$$($(TF_OUT) project_id) \
+	REGION=$$($(TF_OUT) cluster_region) \
+	  envsubst '$$PROJECT_ID $$REGION' < k8s/adk.yaml | kubectl apply -f -
+	kubectl -n nano-llm rollout status deployment/nano-team-adk --timeout=10m
+
 clean-k8s:
 	kubectl delete -f k8s/backend-policy.yaml --ignore-not-found
 	kubectl delete gcpbackendpolicy ollama -n nano-llm --ignore-not-found

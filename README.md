@@ -209,6 +209,37 @@ Every push to `main` then runs `cloudbuild.yaml`: Terraform fmt/validate →
 render manifests → `gcloud deploy releases create` → Cloud Deploy rolls out
 to the cluster.
 
+## 6. Build on top: ADK multi-agent system
+
+`adk/` contains a multi-agent app built with
+[Google's Agent Development Kit](https://google.github.io/adk-docs/) that uses
+this stack's LLM as its brain (via ADK's LiteLLM integration and Ollama's
+OpenAI-compatible API). The team: a **coordinator** that routes requests to a
+**researcher** sub-agent (factual questions) or a **writer** sub-agent
+(drafting), and calls a **calculator tool** for arithmetic.
+
+**Local dev UI** (chat with the agent team in a browser, watch transfers and
+tool calls):
+
+```bash
+pip install -r adk/requirements.txt
+make chat        # terminal 1: port-forward to the LLM
+make adk-web     # terminal 2: ADK dev UI on http://localhost:8000
+```
+
+**Deploy the agent API on the cluster** (talks to Ollama service-to-service;
+NetworkPolicy already allows it):
+
+```bash
+make adk-build   # Cloud Build builds/pushes the image to Artifact Registry
+make adk-deploy  # rolls it out; REST API on svc/nano-team-adk :8000
+```
+
+Caveat: qwen2.5:0.5b handles simple, clearly phrased routing but is a very
+small model — set `NANO_LLM_MODEL=qwen2.5:1.5b` (and seed that model) for
+noticeably better agent behaviour. For a fully managed runtime, the same ADK
+app deploys to **Vertex AI Agent Engine** unchanged.
+
 ## Costs
 
 Rough always-on cost for the core stack: the pod's 2 vCPU / 4 GiB Autopilot
@@ -242,6 +273,7 @@ terraform/            # GCP infra: APIs, VPC+NAT, GKE Autopilot, Artifact
 ├── bootstrap/        # one-time GCS bucket for Terraform state
 k8s/                  # manifest templates: Ollama, seed Job, Open WebUI, HPA,
 │                     # NetworkPolicy, Gateway, backend policies
+adk/                  # ADK multi-agent app (coordinator + researcher + writer)
 scripts/              # smoke-test.sh (end-to-end completion check)
 .github/workflows/    # repo CI: terraform validate + kubeconform + shellcheck
 deploy/skaffold.yaml  # Cloud Deploy render/apply config
