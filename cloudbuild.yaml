@@ -26,6 +26,7 @@ steps:
         mkdir -p rendered
         cp deploy/skaffold.yaml rendered/
         cp k8s/namespace.yaml rendered/
+        cp k8s/webui.yaml rendered/
         sed -e "s/\$${PROJECT_ID}/$PROJECT_ID/g" \
             -e "s/\$${REGION}/${_REGION}/g" \
             -e "s/\$${MODELS_BUCKET}/$PROJECT_ID-nano-llm-models/g" \

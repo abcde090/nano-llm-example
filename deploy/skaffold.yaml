@@ -8,5 +8,6 @@ manifests:
   rawYaml:
     - namespace.yaml
     - ollama.yaml
+    - webui.yaml
 deploy:
   kubectl: {}

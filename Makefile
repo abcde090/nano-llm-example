@@ -34,8 +34,10 @@ deploy:
 	REGION=$$($(TF_OUT) cluster_region) \
 	MODELS_BUCKET=$$($(TF_OUT) models_bucket) \
 	  envsubst '$$PROJECT_ID $$REGION $$MODELS_BUCKET' < k8s/ollama.yaml | kubectl apply -f -
+	kubectl apply -f k8s/webui.yaml
 	kubectl -n nano-llm wait --for=condition=complete job/ollama-model-seed --timeout=20m
 	kubectl -n nano-llm rollout status deployment/ollama --timeout=15m
+	kubectl -n nano-llm rollout status deployment/open-webui --timeout=10m
 
 # Public HTTPS edge: Gateway + HTTPRoute + health check + Cloud Armor/IAP
 # backend policy. Requires terraform applied with var.domain set.
@@ -57,6 +59,10 @@ deploy-gateway:
 # Port-forward for local access without the public edge.
 chat:
 	kubectl -n nano-llm port-forward svc/ollama 11434:11434
+
+# Browser chat UI: open http://localhost:3000 while this runs.
+webui:
+	kubectl -n nano-llm port-forward svc/open-webui 3000:8080
 
 clean-k8s:
 	kubectl delete -f k8s/backend-policy.yaml --ignore-not-found

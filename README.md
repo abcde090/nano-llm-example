@@ -42,7 +42,8 @@ Reference: [AI/ML orchestration on GKE](https://docs.cloud.google.com/kubernetes
           ├── Deployment: ollama (2 vCPU / 4 GiB, CPU-only)
           │     · image via Artifact Registry (Docker Hub proxy)
           │     · /models = GCS FUSE mount (Workload Identity, no keys)
-          └── Service: ollama :11434  (OpenAI-compatible API)
+          ├── Service: ollama :11434  (OpenAI-compatible API)
+          └── Open WebUI (browser chat, port-forward only) ──► ollama
 
  CI/CD: push to main ─► Cloud Build (validate + render) ─► Cloud Deploy ─► GKE
  Ops:   Cloud Monitoring alerts (restarts, memory) · Managed Prometheus
@@ -114,7 +115,24 @@ Autopilot provisions a node; later restarts reuse the bucket.
 
 ## 3. Talk to it
 
-Private (no edge stack needed):
+All of these work privately over port-forward — no public endpoint needed.
+
+**Browser chat (Open WebUI):**
+
+```bash
+make webui         # then open http://localhost:3000
+```
+
+A ChatGPT-style interface backed by the Ollama service; the first account you
+create becomes the admin, and chat history persists on its own disk.
+
+**Terminal chat REPL:**
+
+```bash
+kubectl -n nano-llm exec -it deploy/ollama -- ollama run qwen2.5:0.5b
+```
+
+**API (OpenAI-compatible):**
 
 ```bash
 make chat          # port-forwards svc/ollama to localhost:11434
@@ -128,6 +146,9 @@ curl http://localhost:11434/v1/chat/completions \
     "messages": [{"role": "user", "content": "Say hello in five words."}]
   }'
 ```
+
+Any OpenAI SDK/client also works — set `base_url` to
+`http://localhost:11434/v1` (API key can be any string).
 
 ## 4. (Optional) Public HTTPS endpoint
 
@@ -209,7 +230,7 @@ terraform/            # GCP infra: APIs, VPC+NAT, GKE Autopilot, Artifact
 │                     # Registry, GCS, Cloud Armor, Certificate Manager,
 │                     # IAP, Secret Manager, Monitoring, Cloud Deploy
 ├── bootstrap/        # one-time GCS bucket for Terraform state
-k8s/                  # manifest templates: Ollama, seed Job, Gateway, backend policies
+k8s/                  # manifest templates: Ollama, seed Job, Open WebUI, Gateway, backend policies
 deploy/skaffold.yaml  # Cloud Deploy render/apply config
 cloudbuild.yaml       # CI pipeline (validate → render → release)
 Makefile              # init/plan/apply · creds · deploy · deploy-gateway · chat
