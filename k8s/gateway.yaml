@@ -1,0 +1,67 @@
+# Public HTTPS edge via the GKE Gateway API: a Google-managed global external
+# Application Load Balancer with a Certificate Manager TLS cert.
+#
+# Template variables (filled by `make deploy-gateway`): ${DOMAIN}
+# Requires terraform to have been applied with var.domain set — that creates
+# the static IP (nano-llm-ip) and certificate map (nano-llm-cert-map)
+# referenced below.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: nano-llm
+  namespace: nano-llm
+  annotations:
+    networking.gke.io/certmap: nano-llm-cert-map
+spec:
+  gatewayClassName: gke-l7-global-external-managed
+  addresses:
+    - type: networking.gke.io/named-address
+      value: nano-llm-ip
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ollama
+  namespace: nano-llm
+spec:
+  parentRefs:
+    - name: nano-llm
+  hostnames:
+    - ${DOMAIN}
+  rules:
+    # Only the OpenAI-compatible inference surface is routed. Ollama's
+    # management API (/api/pull, /api/delete, /api/push, ...) stays
+    # unreachable from the internet; use port-forward for it.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1
+      backendRefs:
+        - name: ollama
+          port: 11434
+---
+# The load balancer's default health check probes "/" on the service port;
+# point it at Ollama's real health endpoint instead.
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: ollama
+  namespace: nano-llm
+spec:
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: 11434
+        requestPath: /api/tags
+  targetRef:
+    group: ""
+    kind: Service
+    name: ollama

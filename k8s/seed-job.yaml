@@ -1,0 +1,61 @@
+# One-off Job that seeds the model into the GCS bucket. Ollama can only pull
+# through a running server, so it starts one, pulls, and exits. Later pods
+# find the weights already in the bucket and skip the download.
+#
+# Kept OUT of the Cloud Deploy manifest set (deploy/skaffold.yaml): Job
+# templates are immutable, so re-applying a changed Job would fail the whole
+# rollout. `make deploy` deletes any completed Job before re-applying this.
+#
+# Template variables: ${PROJECT_ID}, ${REGION}, ${MODELS_BUCKET}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ollama-seed
+  namespace: nano-llm
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-model-seed
+  namespace: nano-llm
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      annotations:
+        gke-gcsfuse/volumes: "true"
+    spec:
+      serviceAccountName: ollama-seed
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/dockerhub/ollama/ollama:0.9.6
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              ollama serve &
+              until ollama list >/dev/null 2>&1; do sleep 2; done
+              ollama pull qwen2.5:0.5b
+          env:
+            - name: OLLAMA_MODELS
+              value: /models
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 2Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 2Gi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            volumeAttributes:
+              bucketName: ${MODELS_BUCKET}
+              mountOptions: "implicit-dirs"

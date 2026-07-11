@@ -1,0 +1,26 @@
+# Horizontal autoscaling for the inference deployment. Works because model
+# weights are shared read-only via GCS — new replicas mount the same bucket.
+# Autopilot provisions nodes for scaled-up pods automatically.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ollama
+  namespace: nano-llm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ollama
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      # LLM cold starts are expensive (model load); scale down slowly.
+      stabilizationWindowSeconds: 600

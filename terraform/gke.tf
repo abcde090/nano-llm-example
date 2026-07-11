@@ -24,6 +24,11 @@ resource "google_container_cluster" "nano_llm" {
     channel = "REGULAR"
   }
 
+  # Gateway API for the managed global external load balancer.
+  gateway_api_config {
+    channel = "CHANNEL_STANDARD"
+  }
+
   # Autopilot clusters use Workload Identity by default; pin it explicitly.
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"

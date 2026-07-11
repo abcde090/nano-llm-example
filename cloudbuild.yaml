@@ -1,0 +1,55 @@
+# Cloud Build pipeline: validate Terraform, render the manifests, and hand
+# them to Cloud Deploy for rollout to GKE. Wired to pushes on main by the
+# google_cloudbuild_trigger in terraform/cicd.tf (opt-in).
+steps:
+  - id: terraform-validate
+    name: hashicorp/terraform:1.9
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        cd terraform
+        terraform fmt -check -recursive
+        terraform init -backend=false
+        terraform validate
+
+  # Fill the ${...} template variables. MODELS_BUCKET follows the naming
+  # convention in terraform/storage.tf.
+  - id: render-manifests
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        mkdir -p rendered
+        cp deploy/skaffold.yaml rendered/
+        cp k8s/namespace.yaml rendered/
+        cp k8s/webui.yaml rendered/
+        cp k8s/hpa.yaml rendered/
+        cp k8s/network-policy.yaml rendered/
+        sed -e "s/\$${PROJECT_ID}/$PROJECT_ID/g" \
+            -e "s/\$${REGION}/${_REGION}/g" \
+            -e "s/\$${MODELS_BUCKET}/$PROJECT_ID-nano-llm-models/g" \
+            k8s/ollama.yaml > rendered/ollama.yaml
+
+  - id: create-release
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        gcloud deploy releases create "rel-$SHORT_SHA" \
+          --delivery-pipeline="${_PIPELINE}" \
+          --region="${_REGION}" \
+          --source=rendered \
+          --gcs-source-staging-dir="gs://$PROJECT_ID-nano-llm-deploy-staging/source"
+
+substitutions:
+  _REGION: australia-southeast1
+  _PIPELINE: nano-llm
+
+options:
+  logging: CLOUD_LOGGING_ONLY

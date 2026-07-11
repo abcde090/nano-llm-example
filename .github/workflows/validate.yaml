@@ -1,0 +1,58 @@
+# Repo-level CI (runs on GitHub, no GCP credentials needed): Terraform
+# fmt/validate for both root modules, plus schema validation of the rendered
+# Kubernetes manifests. The GCP-side pipeline (cloudbuild.yaml) does the
+# deploying; this catches breakage on every PR.
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: fmt
+        run: terraform -chdir=terraform fmt -check -recursive
+      - name: validate main module
+        run: |
+          terraform -chdir=terraform init -backend=false
+          terraform -chdir=terraform validate
+      - name: validate bootstrap module
+        run: |
+          terraform -chdir=terraform/bootstrap init -backend=false
+          terraform -chdir=terraform/bootstrap validate
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: render templates with dummy values
+        run: |
+          mkdir -p /tmp/rendered
+          export PROJECT_ID=dummy-project REGION=us-central1 \
+                 MODELS_BUCKET=dummy-bucket DOMAIN=llm.example.com \
+                 IAP_CLIENT_ID=dummy.apps.googleusercontent.com
+          for f in k8s/*.yaml; do
+            envsubst '$PROJECT_ID $REGION $MODELS_BUCKET $DOMAIN $IAP_CLIENT_ID' \
+              < "$f" > "/tmp/rendered/$(basename "$f")"
+          done
+      - name: kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar xz -C /usr/local/bin kubeconform
+          # -ignore-missing-schemas: GKE CRDs (Gateway policies, etc.) have no
+          # public JSON schemas; core kinds are still strictly validated.
+          kubeconform -strict -summary -ignore-missing-schemas /tmp/rendered
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck scripts/*.sh

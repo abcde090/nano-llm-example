@@ -1,17 +1,18 @@
 # Tiny LLM inference server: Ollama running Qwen2.5 0.5B on CPU.
-# Small enough to run on GKE Autopilot without any GPU quota.
+#
+# This file is a template: ${PROJECT_ID}, ${REGION} and ${MODELS_BUCKET} are
+# filled in from Terraform outputs by `make deploy` (envsubst).
+#
+# Managed services in play:
+#   - Image pulled through the Artifact Registry remote repo (Docker Hub proxy)
+#   - Model weights read from a GCS bucket via the GCS FUSE CSI driver
+#     (seeded once by k8s/seed-job.yaml, which has the write-capable identity)
+#   - Bucket access via Workload Identity Federation (no keys, no GSA)
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: ServiceAccount
 metadata:
-  name: ollama-models
+  name: ollama
   namespace: nano-llm
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: standard-rwo
-  resources:
-    requests:
-      storage: 10Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,11 +22,8 @@ metadata:
   labels:
     app: ollama
 spec:
-  replicas: 1
-  # Recreate: the model PVC is ReadWriteOnce, so the old pod must
-  # release it before a new one can start.
-  strategy:
-    type: Recreate
+  # No explicit replicas: the HPA in k8s/hpa.yaml owns the replica count
+  # (a hardcoded value here would reset it on every re-apply).
   selector:
     matchLabels:
       app: ollama
@@ -33,16 +31,21 @@ spec:
     metadata:
       labels:
         app: ollama
+      annotations:
+        gke-gcsfuse/volumes: "true"
     spec:
+      serviceAccountName: ollama
       containers:
         - name: ollama
-          image: ollama/ollama:0.9.6
+          image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/dockerhub/ollama/ollama:0.9.6
           ports:
             - name: http
               containerPort: 11434
           env:
             - name: OLLAMA_KEEP_ALIVE
               value: "-1" # keep the model loaded in memory
+            - name: OLLAMA_MODELS
+              value: /models
           resources:
             requests:
               cpu: "2"
@@ -52,29 +55,39 @@ spec:
               cpu: "2"
               memory: 4Gi
               ephemeral-storage: 2Gi
-          lifecycle:
-            postStart:
-              exec:
-                command: ["ollama", "pull", "qwen2.5:0.5b"]
+          # Gate readiness on the model actually being servable, not just the
+          # server being up: /api/tags returns 200 even with an empty model
+          # store, which would put the pod behind the LB while the seed Job
+          # is still populating the bucket. failureThreshold allows ~30 min
+          # for the seed Job plus gcsfuse metadata caching to catch up.
+          startupProbe:
+            exec:
+              command: ["ollama", "show", "qwen2.5:0.5b"]
+            periodSeconds: 15
+            failureThreshold: 120
           readinessProbe:
             httpGet:
               path: /api/tags
               port: http
-            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /api/tags
               port: http
-            initialDelaySeconds: 30
             periodSeconds: 30
           volumeMounts:
             - name: models
-              mountPath: /root/.ollama
+              mountPath: /models
+              readOnly: true
       volumes:
         - name: models
-          persistentVolumeClaim:
-            claimName: ollama-models
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            readOnly: true
+            volumeAttributes:
+              bucketName: ${MODELS_BUCKET}
+              # file-cache keeps hot model blobs on local disk after first read
+              mountOptions: "implicit-dirs,file-cache:max-size-mb:2048"
 ---
 apiVersion: v1
 kind: Service
@@ -84,8 +97,8 @@ metadata:
   labels:
     app: ollama
 spec:
-  # ClusterIP keeps the LLM private; reach it with kubectl port-forward.
-  # Change to LoadBalancer if you want an external IP (see README).
+  # ClusterIP; reachable via kubectl port-forward, or through the managed
+  # global load balancer when the Gateway stack (k8s/gateway.yaml) is applied.
   type: ClusterIP
   selector:
     app: ollama

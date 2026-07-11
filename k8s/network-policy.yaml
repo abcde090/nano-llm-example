@@ -1,0 +1,35 @@
+# Lock down who can reach the LLM inside the cluster: only Open WebUI pods
+# and the Google load balancer (proxies + health checks) may connect to
+# Ollama. Other workloads in the cluster get connection-refused.
+#
+# kubectl port-forward keeps working: that traffic enters from the node
+# itself (kubelet), which GKE Dataplane V2 exempts from policy enforcement —
+# same reason kubelet probes still pass.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ollama-ingress
+  namespace: nano-llm
+spec:
+  podSelector:
+    matchLabels:
+      app: ollama
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: open-webui
+      ports:
+        - protocol: TCP
+          port: 11434
+    - from:
+        # Google Cloud load balancer proxy and health-check source ranges.
+        - ipBlock:
+            cidr: 130.211.0.0/22
+        - ipBlock:
+            cidr: 35.191.0.0/16
+      ports:
+        - protocol: TCP
+          port: 11434

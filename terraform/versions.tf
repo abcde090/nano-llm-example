@@ -8,9 +8,10 @@ terraform {
     }
   }
 
-  # For team use, swap local state for a GCS backend:
+  # Managed remote state. Create the bucket first with terraform/bootstrap,
+  # then uncomment and run:
+  #   terraform init -migrate-state -backend-config="bucket=<project>-nano-llm-tfstate"
   # backend "gcs" {
-  #   bucket = "your-tf-state-bucket"
   #   prefix = "nano-llm"
   # }
 }
