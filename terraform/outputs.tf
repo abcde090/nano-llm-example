@@ -33,11 +33,6 @@ output "artifact_registry_prefix" {
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.dockerhub_remote.repository_id}"
 }
 
-output "artifact_registry_apps" {
-  description = "Image prefix for first-party application images."
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.apps.repository_id}"
-}
-
 output "gateway_ip" {
   description = "Static IP of the public gateway (empty when var.domain is unset)."
   value       = var.domain != "" ? google_compute_global_address.gateway[0].address : ""

@@ -21,9 +21,6 @@ spec:
         - podSelector:
             matchLabels:
               app: open-webui
-        - podSelector:
-            matchLabels:
-              app: nano-team-adk
       ports:
         - protocol: TCP
           port: 11434

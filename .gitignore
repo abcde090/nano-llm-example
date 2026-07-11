@@ -17,12 +17,6 @@ terraform.tfvars
 # Rendered manifests (Cloud Build staging)
 rendered/
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-
 # Editors / OS
 .DS_Store
 .idea/

@@ -56,10 +56,3 @@ jobs:
       - uses: actions/checkout@v4
       - name: shellcheck
         run: shellcheck scripts/*.sh
-
-  python:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: syntax-check agent app
-        run: python3 -m py_compile adk/nano_team/*.py
