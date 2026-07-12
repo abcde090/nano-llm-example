@@ -12,6 +12,13 @@ terraform.tfvars
 !terraform.tfvars.example
 .terraform.lock.hcl
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
 # Editors / OS
 .DS_Store
 .idea/

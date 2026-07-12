@@ -1,0 +1,30 @@
+{
+  "articles": [
+    {
+      "slug": "returns-policy",
+      "title": "Returns and refunds policy",
+      "body": "Customers may return any item within 30 days of delivery for a full refund. Items must be unused and in original packaging. Refunds are issued to the original payment method within 5 business days of the return being received. Sale items are refundable as store credit only."
+    },
+    {
+      "slug": "shipping-times",
+      "title": "Shipping times and carriers",
+      "body": "Standard shipping takes 3-5 business days within Australia and 7-14 business days internationally. Express shipping (1-2 business days domestic) is available at checkout. Orders placed before 12pm AEST ship the same day. All parcels are tracked."
+    },
+    {
+      "slug": "warranty-claims",
+      "title": "Warranty claims process",
+      "body": "All products carry a 12-month manufacturer warranty. To lodge a claim, customers email support with their order number and photos of the fault. Approved claims receive a replacement or repair; freight for approved claims is covered by us."
+    },
+    {
+      "slug": "price-matching",
+      "title": "Price matching policy",
+      "body": "We match advertised prices from authorised Australian retailers on identical, in-stock items. Requests must include a link to the competitor listing. Price matching cannot be combined with other discounts and excludes clearance stock."
+    }
+  ],
+  "glossary": {
+    "AEST": "Australian Eastern Standard Time, UTC+10.",
+    "RMA": "Return Merchandise Authorisation — the reference number issued for an approved return.",
+    "DOA": "Dead on arrival — a product faulty at first use, eligible for immediate replacement.",
+    "3PL": "Third-party logistics provider that operates our warehouse and shipping."
+  }
+}

@@ -1,0 +1,39 @@
+# MCP Toolbox for Databases configuration (Track 5).
+# Install the toolbox binary: https://googleapis.github.io/genai-toolbox/
+#   toolbox --tools-file toolbox/tools.yaml    # MCP endpoint on :5000/mcp
+#
+# Uses Toolbox's prebuilt BigQuery tool kinds so the agent can explore and
+# query datasets (including public ones like bigquery-public-data) billed to
+# your project. BIGQUERY_PROJECT comes from the environment.
+sources:
+  bq:
+    kind: bigquery
+    project: ${BIGQUERY_PROJECT}
+
+tools:
+  execute_sql:
+    kind: bigquery-execute-sql
+    source: bq
+    description: Run a BigQuery standard-SQL query and return the rows.
+
+  list_dataset_ids:
+    kind: bigquery-list-dataset-ids
+    source: bq
+    description: List dataset IDs available in the project.
+
+  list_table_ids:
+    kind: bigquery-list-table-ids
+    source: bq
+    description: List table IDs in a dataset.
+
+  get_table_info:
+    kind: bigquery-get-table-info
+    source: bq
+    description: Get the schema and metadata for a table.
+
+toolsets:
+  bigquery:
+    - execute_sql
+    - list_dataset_ids
+    - list_table_ids
+    - get_table_info
